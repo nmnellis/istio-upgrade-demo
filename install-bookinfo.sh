@@ -16,4 +16,7 @@ kubectl apply -n bookinfo -f samples/bookinfo/platform/kube/bookinfo.yaml
 
 kubectl apply -n bookinfo -f samples/bookinfo/networking/bookinfo-gateway.yaml
 
+# scale apps to 2
+kubectl scale -n bookinfo --replicas=2 deployment/ratings-v1 deployment/productpage-v1 deployment/reviews-v1 deployment/reviews-v2 deployment/reviews-v3
+
 popd
