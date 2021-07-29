@@ -33,7 +33,7 @@ spec:
             scaleTargetRef:
               apiVersion: apps/v1
               kind: Deployment
-              name: istio-ingressgateway-1-10-3
+              name: istio-ingressgateway-1-9-7
           strategy:
             rollingUpdate:
               maxSurge: 100%
