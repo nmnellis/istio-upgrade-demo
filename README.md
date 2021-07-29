@@ -1,5 +1,7 @@
 # Upgrade Istio Example
 
+![Istio Deployment Architecture](./production-istio_gateways.png)
+
 ## Prep
 
 ```sh
