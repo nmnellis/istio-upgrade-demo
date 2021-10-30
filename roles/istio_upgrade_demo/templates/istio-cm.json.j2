@@ -1,0 +1,14 @@
+{% set istio_version = item.key %}
+{% set istio_revision = item.value.revision %}
+{
+    "apiVersion": "v1",
+    "data": [[ istio_cm_data ]],
+    "kind": "ConfigMap",
+    "metadata": {
+        "labels": {
+            "istio.io/rev": "[[ istio_revision ]]"
+        },
+        "name": "istio-[[ istio_revision ]]",
+        "namespace": "istio-gateways"
+    }
+}

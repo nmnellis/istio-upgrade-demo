@@ -1,0 +1,10 @@
+---
+- name: 'Wait for Deployment {{ deployment_name }}-{{ item.value.revision }}'
+  k8s_info:
+    kind: Deployment
+    name: '{{ deployment_name }}-{{ item.value.revision }}'
+    namespace: '{{ deployment_namespace }}'
+  register: deployment_result
+  until: ( deployment_result.resources[0].status.availableReplicas is defined) and (deployment_result.resources[0].status.availableReplicas == deployment_result.resources[0].status.replicas)
+  retries: 18
+  delay: 10
