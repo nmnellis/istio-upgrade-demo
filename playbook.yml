@@ -1,0 +1,11 @@
+- hosts: localhost
+
+  vars_files:
+    - vars.yml
+  vars:
+    work_dir: "{{ playbook_dir }}"
+  
+  roles:
+    - name: kameshsampath.minikube
+    - name: istio_upgrade_demo
+    

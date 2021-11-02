@@ -1,23 +1,26 @@
+#jinja2: lstrip_blocks: "True"
+{% set istio_version = item.key %}
+{% set istio_revision = item.value.revision %}
 apiVersion: install.istio.io/v1alpha1
 kind: IstioOperator
 metadata:
-  name: ingress-gateway-1-10-3
+  name: ingress-gateway-[[ istio_revision ]]
   namespace: istio-gateways
 spec:
   profile: empty
   # This value is required for Gloo Mesh Istio
   hub: gcr.io/istio-enterprise
   # This value can be any Gloo Mesh Istio tag
-  tag: 1.10.3
-  revision: 1-10-3
+  tag: [[ istio_version ]]
+  revision: [[ istio_revision]]
   components:
     ingressGateways:
-      - name: istio-ingressgateway-1-10-3
+      - name: istio-ingressgateway-[[ istio_revision ]]
         namespace: istio-gateways
         enabled: true
         label:
           istio: ingressgateway
-          version: 1-10-3
+          version: [[ istio_revision ]]
           app: istio-ingressgateway
           # matches spec.values.global.network in istiod deployment
           topology.istio.io/network: production-cluster-network
@@ -33,7 +36,7 @@ spec:
             scaleTargetRef:
               apiVersion: apps/v1
               kind: Deployment
-              name: istio-ingressgateway-1-10-3
+              name: istio-ingressgateway-[[ istio_revision ]]
           strategy:
             rollingUpdate:
               maxSurge: 100%

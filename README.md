@@ -4,131 +4,70 @@
 
 ## Prep
 
+- Download and install [direnv](https://direnv.net)
+- Download and Install [pipx](https://pypa.github.io/pipx/)
+
 ```sh
-kubectl create namespace istio-operator
-kubectl create namespace istio-system
-kubectl create namespace istio-gateways
-kubectl create namespace istio-config
+brew install pipx
+```
 
-# Set environment variables
-WORK_DIR=$(pwd)
-ISTIO_9_VERSION=1.9.7
-ISTIO_9_REVISION=1-9-7
-ISTIO_9_DIR=$WORK_DIR/$ISTIO_9_REVISION
-ISTIO_10_VERSION=1.10.3
-ISTIO_10_REVISION=1-10-3
-ISTIO_10_DIR=$WORK_DIR/$ISTIO_10_REVISION
+```sh
+pipx install poetry
+poetry config virtualenvs.in-project true
+```
 
+Install ansible and its co
+
+```shell
+poetry install
+```
+
+Activate the `virtualenv` and install Ansible dependencies:
+
+```shell
+poetry shell
+ansible-galaxy collection install -r requirements.yml
 ```
 
 ## Deploy Istio 1.9.7
 
-```sh
-# in the 1-9-7 folder
-cd $ISTIO_9_DIR
-curl -L https://istio.io/downloadIstio | ISTIO_VERSION=$ISTIO_9_VERSION sh -
+Edit the `vars.yml` and ensure that,
 
-# Deploy operator
-# cannot use helm install due to namespace ownership https://github.com/istio/istio/pull/30741
-helm template istio-operator-$REVISION $ISTIO_9_DIR/istio-$ISTIO_9_VERSION/manifests/charts/istio-operator \
-  --include-crds \
-  --set operatorNamespace=istio-operator \
-  --set watchedNamespaces="istio-system\,istio-gateways" \
-  --set global.hub="docker.io/istio" \
-  --set global.tag="$ISTIO_9_VERSION" \
-  --set revision="$ISTIO_9_REVISION" > $ISTIO_9_DIR/operator.yaml
+- `istio_versions -> 1.9.7 --> install` is set to `yes`
+- `istio_versions -> 1.10.3 --> install` is set to `no`
 
-# apply the operator
-kubectl apply -f $ISTIO_9_DIR/operator.yaml
+### vars.yaml
 
-# wait for operator to be ready
-sleep 20s
-
-# install IstioOperator spec
-kubectl apply -f $ISTIO_9_DIR/istiooperator.yaml
+```yaml
+...
+istio_versions:
+  1.9.7:
+    sha256: 4d4a15f14137869a5b6f7a38fde67b0ab14da9ab824ffc21025b70e407236b32
+    install: yes
+  1.10.3:
+    sha256: cbe84864b6db358c0998c83e0c58c041d1ee81aa9dea108eaa8ebe5cc80de657
+    install: no
+...
 ```
 
-## Deploy Istio Gateway 1.9.7
-
-We will deploy a standalone instance of the ingressgateway without a loadbalanced service. Instead we will deploy our own loadBalancer service that we can use to migrate versions of gateways as we upgrade.
+Run the following commmand so start the install and configure,
 
 ```sh
-# in the 1-9-7 folder
-cd $ISTIO_9_DIR
-
-# copy configmap from istio-system to istio-gateways
-CM_DATA=$(kubectl get configmap istio-$ISTIO_9_REVISION -n istio-system -o jsonpath={.data})
-cat <<EOF > $ISTIO_9_DIR/istio-$ISTIO_9_REVISION.json
-{
-    "apiVersion": "v1",
-    "data": $CM_DATA,
-    "kind": "ConfigMap",
-    "metadata": {
-        "labels": {
-            "istio.io/rev": "$ISTIO_9_REVISION"
-        },
-        "name": "istio-$ISTIO_9_REVISION",
-        "namespace": "istio-gateways"
-    }
-}
-EOF
-
-kubectl apply -f $ISTIO_9_DIR/istio-$ISTIO_9_REVISION.json
-
-kubectl apply -n istio-gateways -f $ISTIO_9_DIR/ingressgateway.yaml
-
-# Deploy the LoadBalanced Service
-cat <<EOF | kubectl apply -f -
-apiVersion: v1
-kind: Service
-metadata:
-  name: istio-ingressgateway
-  namespace: istio-gateways
-spec:
-  type: LoadBalancer
-  selector:
-    istio: ingressgateway
-    # select the $ISTIO_9_REVISION revision
-    version: $ISTIO_9_REVISION
-  ports:
-  - name: status-port
-    port: 15021
-    targetPort: 15021
-  - name: http2
-    port: 80
-    targetPort: 8080
-  - name: https
-    port: 443
-    targetPort: 8443
-  - name: tcp
-    port: 31400
-    targetPort: 31400
-  - name: tls
-    port: 15443
-    targetPort: 15443
-EOF
+ansible-playbook playbook.yaml
 ```
 
-## Deploy Bookinfo
+The ansible play will do the following,
 
-Install the bookinfo application in the `bookinfo` namespace with the sidecars using the 1-9-7 revision.
+- Download and install `minikube` and creates a Kubernetes cluster
+- Install istio v1.9.7 using Istio Operator in istio-operator namespace
+- Install Istio Gateways in istio-gateways namespace
+- Install BookInfo App in bookinfo namesapace
 
-```sh
-kubectl create namespace bookinfo
+## Test that productpage is reachable
 
-kubectl label ns bookinfo istio.io/rev=$ISTIO_9_REVISION
-
-kubectl apply -n bookinfo -f $ISTIO_9_DIR/istio-$ISTIO_9_VERSION/samples/bookinfo/platform/kube/bookinfo.yaml
-
-kubectl apply -n bookinfo -f $ISTIO_9_DIR/istio-$ISTIO_9_VERSION/samples/bookinfo/networking/bookinfo-gateway.yaml
-
-# scale apps to 2
-kubectl scale -n bookinfo --replicas=2 deployment/details-v1 deployment/ratings-v1 deployment/productpage-v1 deployment/reviews-v1 deployment/reviews-v2 deployment/reviews-v3
-
-
-# Test that productpage is reachable
-curl localhost:8080/productpage
-
+```shell
+INGRESS_IP=$(kubectl get svc -n istio-gateways istio-ingressgateway -ojsonpath='{.status.loadBalancer.ingress[*].ip}')
+curl "http://$INGRESS_IP:8080/productpage"
 ```
 
 ## Generate Traffic
@@ -140,133 +79,44 @@ In a separete terminal, start generating some traffic as we upgrade istio to tes
 
 ## Deploy Istio 1.10 Operator
 
-Follow the same installation method with 1.9 but now for Istio 1.10
+Edit the `vars.yml` and ensure that,
 
-```sh
-# in the 1-10-3 folder
-cd $ISTIO_10_DIR
-curl -L https://istio.io/downloadIstio | ISTIO_VERSION=$ISTIO_10_VERSION sh -
+- `istio_versions -> 1.9.7 --> install` is set to `no`
+- `istio_versions -> 1.10.3 --> install` is set to `yes`
 
-# Deploy operator
-# cannot use helm install due to namespace ownership https://github.com/istio/istio/pull/30741
-helm template istio-operator-$REVISION $ISTIO_10_DIR/istio-$ISTIO_10_VERSION/manifests/charts/istio-operator \
-  --include-crds \
-  --set operatorNamespace=istio-operator \
-  --set watchedNamespaces="istio-system\,istio-gateways" \
-  --set global.hub="docker.io/istio" \
-  --set global.tag="$ISTIO_10_VERSION" \
-  --set revision="$ISTIO_10_REVISION" > $ISTIO_10_DIR/operator.yaml
+### vars.yaml
 
-# apply operator yaml
-kubectl apply -f $ISTIO_10_DIR/operator.yaml
-
-# wait for operator to be ready
-sleep 20s
-
-# install IstioOperator spec
-kubectl apply -f $ISTIO_10_DIR/istiooperator.yaml
-
+```yaml
+...
+istio_versions:
+  1.9.7:
+    sha256: 4d4a15f14137869a5b6f7a38fde67b0ab14da9ab824ffc21025b70e407236b32
+    install: no
+  1.10.3:
+    sha256: cbe84864b6db358c0998c83e0c58c041d1ee81aa9dea108eaa8ebe5cc80de657
+    install: yes
+...
 ```
 
-## Deploy Gateway 1.10.3
-
-We will be deploying the 1.10.3 gateway but it will be unused at the moment due to the LoadBalanced service still pointing to the 1.9.7 revision gateways.
+Run the following command to peform the upgrade,
 
 ```sh
-# in the 1-10-3 folder
-cd $ISTIO_10_DIR
-
-# copy configmap from istio-system to istio-gateways
-CM_DATA=$(kubectl get configmap istio-$ISTIO_10_REVISION -n istio-system -o jsonpath={.data})
-cat <<EOF > $ISTIO_10_DIR/istio-$ISTIO_10_REVISION.json
-{
-    "apiVersion": "v1",
-    "data": $CM_DATA,
-    "kind": "ConfigMap",
-    "metadata": {
-        "labels": {
-            "istio.io/rev": "$ISTIO_10_REVISION"
-        },
-        "name": "istio-$ISTIO_10_REVISION",
-        "namespace": "istio-gateways"
-    }
-}
-EOF
-
-kubectl apply -f $ISTIO_10_DIR/istio-$ISTIO_10_REVISION.json
-
-kubectl apply -n istio-gateways -f $ISTIO_10_DIR/ingressgateway.yaml
+ansible-playbook playbook.yaml
 ```
 
-## Migrate Bookinfo to 1.10.3
+The play will,
 
-```sh
-# change label to 1.10.3
-kubectl label ns bookinfo istio.io/rev=$ISTIO_10_REVISION --overwrite
+- Install Istio v1.10.3 using Istio Operator in istio-operator namespace
+- Install Istio Gateways v1.10.3 in istio-gateways namespace
+- Update the istio ingress gateway service to use `1.10.3` revision
+- Resatart BookInfo Applications in bookinfo namesapace
 
-# roll all of the applications 1 at a time
-kubectl rollout restart deployment -n bookinfo details-v1
-sleep 20s
-kubectl rollout restart deployment -n bookinfo ratings-v1
-sleep 20s
-kubectl rollout restart deployment -n bookinfo productpage-v1
-sleep 20s
-kubectl rollout restart deployment -n bookinfo reviews-v1
-sleep 20s
-kubectl rollout restart deployment -n bookinfo reviews-v2
-sleep 20s
-kubectl rollout restart deployment -n bookinfo reviews-v3
-
-```
-
-## Migrate Gateway to 1.10.3
-
-```sh
-# Update the LoadBalanced Service
-cat <<EOF | kubectl apply -f -
-apiVersion: v1
-kind: Service
-metadata:
-  name: istio-ingressgateway
-  namespace: istio-gateways
-spec:
-  type: LoadBalancer
-  selector:
-    istio: ingressgateway
-    # select the $ISTIO_10_REVISION revision
-    version: $ISTIO_10_REVISION
-  ports:
-  - name: status-port
-    port: 15021
-    targetPort: 15021
-  - name: http2
-    port: 80
-    targetPort: 8080
-  - name: https
-    port: 443
-    targetPort: 8443
-  - name: tcp
-    port: 31400
-    targetPort: 31400
-  - name: tls
-    port: 15443
-    targetPort: 15443
-EOF
-```
-
-## cleanup assets
+## Cleanup  up assets
 
 We should be able to leverage the 1-9-7 operator to uninstall the old istio assets. Once that is complete we can cleanup the old operator as well.
 
 ```sh
-kubectl delete -f $ISTIO_9_DIR/ingressgateway.yaml
-kubectl delete -f $ISTIO_9_DIR/istiooperator.yaml
-
-# give 2 min to cleanup
-sleep 120s
-
-# remove operator
-kubectl delete -f $ISTIO_9_DIR/operator.yaml
+ansible-playbook cleanup.yml
 ```
 
 ## Validate Traffic

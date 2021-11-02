@@ -1,15 +1,18 @@
+#jinja2: lstrip_blocks: "True"
+{% set istio_version = item.key %}
+{% set istio_revision = item.value.revision %}
 apiVersion: install.istio.io/v1alpha1
 kind: IstioOperator
 metadata:
-  name: 1-10-3
+  name: [[ istio_revision ]]
   namespace: istio-system
 spec:
   profile: minimal
   # This value is required for Gloo Mesh Istio
   hub: gcr.io/istio-enterprise
   # This value can be any Gloo Mesh Istio tag
-  tag: 1.10.3
-  revision: 1-10-3
+  tag: [[ istio_version ]]
+  revision: [[ istio_revision ]]
 
   # You may override parts of meshconfig by uncommenting the following lines.
   meshConfig:
@@ -62,7 +65,7 @@ spec:
       k8s:
         # Recommended to be >1 in production
         replicaCount: 2
-        # The Istio load tests mesh consists of 1000 services and 2000 sidecars with 70,000 mesh-wide requests per second and Istiod used 1 vCPU and 1.5 GB of memory (1.10.3).
+        # The Istio load tests mesh consists of 1000 services and 2000 sidecars with 70,000 mesh-wide requests per second and Istiod used 1 vCPU and 1.5 GB of memory ([[ istio_version ]]).
         resources:
           requests:
             cpu: 200m
@@ -79,7 +82,7 @@ spec:
             apiVersion: apps/v1
             kind: Deployment
             # matches the format istiod-<revision_label>
-            name: istiod-1-10-3
+            name: istiod-[[ istio_revision ]]
           metrics:
             - resource:
                 name: cpu
@@ -111,7 +114,7 @@ spec:
         clusterName: production-cluster
     #   istioNamespace: istio-system
       # proxy:
-      #   # The Istio load tests mesh consists of 1000 services and 2000 sidecars with 70,000 mesh-wide requests per second and istio-proxy used 0.35 vCPU and 40 MB memory per 1000 requests per second (1.10.3).
+      #   # The Istio load tests mesh consists of 1000 services and 2000 sidecars with 70,000 mesh-wide requests per second and istio-proxy used 0.35 vCPU and 40 MB memory per 1000 requests per second ([[ istio_version ]]).
       #   resources:
       #     requests:
       #       cpu: 100m
