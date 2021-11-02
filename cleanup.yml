@@ -1,0 +1,43 @@
+- hosts: localhost
+
+  vars_files:
+    - vars.yml
+  vars:
+    work_dir: "{{ playbook_dir }}"
+  
+  tasks:
+  - name: "Delete Istio Ingress Gateway"
+    kubernetes.core.k8s:
+      state: absent
+      template:
+        path: ingressgateway.yaml.j2
+        variable_start_string: "[["
+        variable_end_string: "]]"
+    loop: "{{ istio_versions | dict2items }}"
+    loop_control:
+      label: "{{ item.key }}"
+    when: not ( item.value.install | bool )
+
+  - name: "Delete IstioOperator Spec"
+    kubernetes.core.k8s:
+      state: absent
+      template:
+        path: istio-operator.yaml.j2
+        variable_start_string: "[["
+        variable_end_string: "]]"
+    loop: "{{ istio_versions | dict2items }}"
+    loop_control:
+      label: "{{ item.key }}"
+    when: not ( item.value.install | bool )
+
+  # TODO give some slack or check object status ?
+
+  - name: "Delete Operator"
+    kubernetes.core.k8s:
+      state: absent
+      src: "{{ work_dir }}/{{ item.value.revision }}/operator.yaml"
+      namespace: istio-operator
+    loop: "{{ istio_versions | dict2items }}"
+    loop_control:
+      label: "{{ item.key }}"
+    when: not ( item.value.install | bool )

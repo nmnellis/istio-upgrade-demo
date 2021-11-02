@@ -1,8 +1,8 @@
-# TODO add linux 
+# TODO add linux
 
 - name: "Set Istio Versions Fact"
   set_fact:
-   istio_versions: "{{ istio_versions | combine( { item.key:  { \"sha256\": item.value.sha256 , \"revision\": rev_label, \"install\": item.value.install } } ) }}"
+    istio_versions: '{{ istio_versions | combine( { item.key:  { "sha256": item.value.sha256 , "revision": rev_label, "install": item.value.install } } ) }}'
   vars:
     rev_label: "{{ item.key | regex_replace('\\.','-') }}"
   loop: "{{ istio_versions | dict2items }}"
@@ -74,7 +74,6 @@
   loop_control:
     label: "{{ item.item.key }}"
 
-
 - name: "Install Operator"
   kubernetes.core.k8s:
     state: present
@@ -98,16 +97,16 @@
 - name: "Create IstioOperator Spec"
   kubernetes.core.k8s:
     state: present
-    template: 
+    template:
       path: istio-operator.yaml.j2
-      variable_start_string: '[['
-      variable_end_string: ']]'
+      variable_start_string: "[["
+      variable_end_string: "]]"
   loop: "{{ istio_versions | dict2items }}"
   loop_control:
     label: "{{ item.key }}"
   when: ( item.value.install | bool )
 
-- name: 'Wait for istiod to be ready'
+- name: "Wait for istiod to be ready"
   include: utils/revisioned_status_check.yml
   loop: "{{ istio_versions | dict2items }}"
   loop_control:
@@ -134,7 +133,7 @@
 
 - name: "Set Istio ConfigMap Facts"
   set_fact:
-    istio_cm_data: "{{ item.resources[0].data }}" 
+    istio_cm_data: "{{ item.resources[0].data }}"
   loop: "{{ istio_cm_result.results }}"
   loop_control:
     label: "{{ item.item.key }}"
@@ -147,14 +146,14 @@
   kubernetes.core.k8s:
     state: present
     definition:
-       api_version: v1
-       kind: ConfigMap
-       metadata:
-         name: "istio-{{ item.value.revision }}"
-         namespace: istio-gateways
-         labels:
-            istio.io/rev: "{{ item.value.revision }}"
-       data: "{{ istio_cm_data | from_yaml }}"
+      api_version: v1
+      kind: ConfigMap
+      metadata:
+        name: "istio-{{ item.value.revision }}"
+        namespace: istio-gateways
+        labels:
+          istio.io/rev: "{{ item.value.revision }}"
+      data: "{{ istio_cm_data | from_yaml }}"
   loop: "{{ istio_versions | dict2items }}"
   loop_control:
     label: "{{ item.key }}"
@@ -163,16 +162,16 @@
 - name: "Create Istio Ingress Gateway"
   kubernetes.core.k8s:
     state: present
-    template: 
+    template:
       path: ingressgateway.yaml.j2
-      variable_start_string: '[['
-      variable_end_string: ']]'
+      variable_start_string: "[["
+      variable_end_string: "]]"
   loop: "{{ istio_versions | dict2items }}"
   loop_control:
     label: "{{ item.key }}"
   when: ( item.value.install | bool )
 
-- name: 'Wait for istio ingressgateway to be ready'
+- name: "Wait for istio ingressgateway to be ready"
   include: utils/revisioned_status_check.yml
   loop: "{{ istio_versions | dict2items }}"
   loop_control:
@@ -182,19 +181,19 @@
     deployment_namespace: istio-gateways
   when: ( item.value.install | bool )
 
-- name: "Create Istio Ingress Gateway Service"
+- name: "Create or Upgrade Istio Ingress Gateway Service"
   kubernetes.core.k8s:
     state: present
-    template: 
+    template:
       path: istio-ingressgateway-service.yaml.j2
-      variable_start_string: '[['
-      variable_end_string: ']]'
+      variable_start_string: "[["
+      variable_end_string: "]]"
   loop: "{{ istio_versions | dict2items }}"
   loop_control:
     label: "{{ item.key }}"
   when: ( item.value.install | bool )
 
-- name: "Create Istio Namespaces"
+- name: "Create/Update BookInfo Namespace"
   kubernetes.core.k8s:
     state: present
     definition:
@@ -203,7 +202,7 @@
       metadata:
         name: bookinfo
         labels:
-            istio.io/rev: "{{ item.value.revision }}"
+          istio.io/rev: "{{ item.value.revision }}"
   loop: "{{ istio_versions | dict2items }}"
   loop_control:
     label: "{{ item.key }}"
@@ -214,10 +213,13 @@
     state: present
     src: "{{  work_dir }}/{{ item.value.revision }}/istio-{{ item.key }}/samples/bookinfo/platform/kube/bookinfo.yaml"
     namespace: bookinfo
+    wait: yes
+    wait_timeout: 180
   loop: "{{ istio_versions | dict2items }}"
   loop_control:
     label: "{{ item.key }}"
   when: ( item.value.install | bool )
+  register: bookinfo_deployment
 
 - name: "Deploy Bookinfo Gateway"
   kubernetes.core.k8s:
@@ -228,3 +230,33 @@
   loop_control:
     label: "{{ item.key }}"
   when: ( item.value.install | bool )
+
+- name: "Restart BookInfo Apps"
+  include: utils/restart_bookinfo.yml
+  vars:
+    resources:
+      details-v1:
+          kind: Deployment
+          namespace: bookinfo
+          replicas: 1
+      ratings-v1:
+          kind: Deployment
+          namespace: bookinfo
+          replicas: 1
+      productpage-v1:
+          kind: Deployment
+          namespace: bookinfo
+          replicas: 1
+      reviews-v1:
+          kind: Deployment
+          namespace: bookinfo
+          replicas: 1
+      reviews-v2:
+          kind: Deployment
+          namespace: bookinfo
+          replicas: 1
+      reviews-v3:
+          kind: Deployment
+          namespace: bookinfo
+          replicas: 1
+  when: not bookinfo_deployment.changed

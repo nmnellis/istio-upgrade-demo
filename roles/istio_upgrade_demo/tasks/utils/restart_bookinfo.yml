@@ -1,0 +1,8 @@
+---
+- name: 'Restart Bookinfo Applications'
+  ansible.builtin.shell: |
+    kubectl rollout restart deployment {{ item.key }} --namespace={{ item.value.namespace }}
+    kubectl rollout status deployment {{ item.key }} --namespace={{ item.value.namespace }} --timeout=20s
+  loop: "{{ resources | dict2items }}"
+  loop_control:
+     label: "{{ item.key }}"

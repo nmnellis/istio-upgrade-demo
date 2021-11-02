@@ -10,8 +10,8 @@ minikube_profile_name: istio-upgrade-demo
 istio_versions:
   1.9.7:
     sha256: 4d4a15f14137869a5b6f7a38fde67b0ab14da9ab824ffc21025b70e407236b32
-    install: yes
+    install: no
   1.10.3:
     sha256: cbe84864b6db358c0998c83e0c58c041d1ee81aa9dea108eaa8ebe5cc80de657
-    install: no
+    install: yes
 
